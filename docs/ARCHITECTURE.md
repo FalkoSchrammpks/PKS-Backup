@@ -17,6 +17,7 @@ or as a sidecar launched by the GUI for interactive runs. It owns:
 
 - the PBS protocol client (via `pbs-client`),
 - SQL Server topology detection and VDI streaming backup/restore,
+- the backup relay (proxy and agent roles, see below),
 - VSS based filesystem backup,
 - the scheduler,
 - the IPC server.
@@ -50,16 +51,41 @@ Transaction log management: for FULL and BULK_LOGGED databases the engine takes
 regular non copy-only log backups to truncate the log, keep it bounded, and
 provide point-in-time recovery. The log chain must not be broken.
 
+## Remote backup relay
+
+The CPU-heavy part of a backup is on the client: chunking, hashing, compression,
+and encryption of every chunk. In local mode that runs on the SQL Server host. VDI
+is local-only, so the backup device must stay on the SQL host, but nothing else
+must.
+
+Relay mode splits the work there. One engine binary has two roles. An agent on the
+SQL host runs only the VDI device. It streams the raw backup bytes over a TLS link
+to a proxy. The proxy runs the job: it issues BACKUP and RESTORE over TDS, does the
+chunk/compress/encrypt/upload work, and talks to PBS.
+
+The agent dials out to the proxy. The proxy pins nothing new for the operator: the
+agent pins the proxy certificate by fingerprint and authenticates with a token, the
+same trust model pbsgui uses toward PBS. The agent holds no SQL or PBS credentials.
+
+The wire protocol frames a control stream and a per-session data stream. A backup
+data stream ends with a verdict frame, so the proxy never commits a snapshot from a
+stream the agent did not finish. Restore reverses the flow: the proxy streams the
+image to the agent, which fills the device. See [RELAY.md](RELAY.md) for the
+deployment and the credential model.
+
 ## Storage model
 
 Each SQL backup operation becomes one PBS snapshot per database. The VDI byte
 stream is stored as a deduplicated dynamic-index archive (a fixed index needs the
 size up front, which a VDI stream does not provide). Full and log backups use
-separate snapshot groups so they do not interleave. Restore today reassembles a
-full snapshot and streams it back over VDI. Point-in-time restore from a full
-plus a differential and a log chain, driven by per-snapshot metadata (backup
-type, recovery model, LSNs, and the instance / database / cluster identity), is
-the intended direction and not yet implemented.
+separate snapshot groups so they do not interleave. Relay backups use the same
+storage layout; only the path the bytes take to the proxy differs.
+
+Point-in-time restore is implemented. Each snapshot stores its backup metadata
+(backup type, recovery model, LSN range, and the database file list). pbsgui picks
+the covering full and its log chain, restores the full `WITH NORECOVERY`, replays
+the logs `WITH STOPAT`, and recovers at the chosen second. It can also restore a
+chosen full. Differential backups are not supported yet.
 
 ## IPC
 

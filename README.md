@@ -27,6 +27,10 @@ a moment in time.
 - **Always On and Failover Cluster aware.** Install on every node; it coordinates
   through SQL Server with no link between the pbsgui instances. Exactly one node
   backs up at a time and it follows failover automatically.
+- **Relay mode for fleets.** Run a thin agent on the SQL Server host and move the
+  backup CPU (chunking, compression, encryption, upload) to a separate proxy
+  machine, so the database server keeps its cores. See
+  [docs/RELAY.md](docs/RELAY.md).
 - **File and folder backup** with content-defined chunking and incremental
   deduplication, so repeat backups are fast and small. Browse snapshots and restore
   in full or by selected files.
@@ -99,9 +103,11 @@ administrator-only control socket. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 
 ## Documentation
 
-- [docs/](docs/README.md) - overview, screenshots, and the guides below.
+- [docs/](docs/README.md) - index, overview, why pbsgui exists, and the guides below.
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - install and run in production.
+- [RELAY.md](docs/RELAY.md) - deploy relay mode (thin agent plus proxy).
 - [STATUS.md](docs/STATUS.md) - what works, what is in progress, and planned.
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - components and the SQL backup strategy.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - components, the SQL backup strategy, and the relay.
 - [DEVELOPERS.md](docs/DEVELOPERS.md) - build from source, run, and test.
 - [TESTING.md](docs/TESTING.md) - the test tiers and the manual integration pass.
 

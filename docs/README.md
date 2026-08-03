@@ -1,62 +1,56 @@
-# pbsgui
+# pbsgui documentation
 
-A Windows GUI for backing up Windows machines and Microsoft SQL Server to a
-Proxmox Backup Server (PBS), with browse and restore.
+pbsgui backs up Windows machines and Microsoft SQL Server to a Proxmox Backup
+Server (PBS). It runs as a native Windows app and service. It does full and
+transaction-log SQL backups, browse, and restore to any point in time.
 
-pbsgui talks to PBS using a clean-room Rust reimplementation of the PBS backup
-protocol, so it does not embed the official client and is free to ship under its
-own license (GPL-3.0).
+## Why this exists
 
-Requires **Proxmox Backup Server 4.2 or newer**. (Older 3.x servers reject the
-backup with a 403 at the protocol upgrade and are not supported.)
+The official Proxmox backup client is Linux-only and AGPL-licensed. It cannot run
+on Windows. Its Rust crates are bound to the Unix file model, and its archive
+format encodes Unix file semantics. So a Windows shop that runs PBS has no
+first-party way to back up Windows or SQL Server to it.
 
-## Goals
+pbsgui fills that gap. It reimplements the PBS backup protocol clean-room in Rust,
+from the published protocol docs, so it runs natively on Windows and ships under
+its own license (GPL-3.0). It is built for SQL Server, not bolted on: it streams
+backups over the SQL Virtual Device Interface, manages the transaction-log chain,
+handles Always On and Failover Cluster Instances, and restores to a chosen second.
+It encrypts on the client, so the server never sees the key.
 
-- Back up Microsoft SQL Server (standalone, Failover Cluster Instance, and Always
-  On Availability Groups) directly to PBS, including full, differential, and
-  transaction-log backups, with correct log-chain management.
-- Back up generic Windows files and folders to PBS with content-defined chunking
-  and incremental, server-side deduplication.
-- Browse snapshots by date and time and restore them in full or in part.
-- Optionally encrypt backups on the client with AES-256-GCM, byte-compatible with
-  the PBS encryption scheme, so the server never sees the key.
-- Run unattended as a Windows service, with a tray-based GUI for configuration
-  and monitoring that can be closed without stopping backups.
-- Be easy to operate: discover SQL Server instances, store secrets in the OS
-  credential store, and (planned) report job outcomes through notifications.
+The other Windows GUI for PBS backs up files only. It does no SQL-aware backup and
+no client-side encryption. Those are the reasons pbsgui exists.
 
-## Architecture
+## Backup topologies
 
-pbsgui is split into two processes:
+pbsgui runs SQL backups two ways.
 
-- **`pbsgui` (the GUI)** is an unprivileged [Tauri](https://tauri.app) app: a Rust
-  core with a static HTML/CSS/JS front end (no JS build step). It only configures
-  and monitors; it never performs backups itself, so closing it never stops a
-  running backup.
-- **`pbsgui-engine` (the engine)** does the privileged work: it runs the backup
-  protocol, the scheduler, SQL Server integration, and secret storage. It runs as
-  a Windows service (LocalSystem) in production, or in the foreground during
-  development.
+- **Local.** The engine runs on the SQL Server host and does everything there:
+  reads the database over VDI, chunks, compresses, encrypts, and uploads to PBS.
+  Simple, one machine per SQL Server. The backup CPU runs on the database server.
+- **Relay.** A thin agent on the SQL Server host runs only the VDI device and
+  streams the raw backup to a separate proxy machine. The proxy does the chunking,
+  compression, encryption, and upload. The backup CPU moves off the database
+  server. This is for fleets and for hosts that cannot spare cores during the
+  backup window. See [RELAY.md](RELAY.md).
 
-The two communicate over a local socket (a named pipe on Windows, a Unix domain
-socket on Linux) using newline-delimited JSON. The socket name is versioned so a
-newer GUI never connects to a stale engine.
+## Documentation index
 
-The PBS protocol itself is reimplemented from the published protocol
-documentation: the HTTP/1.1 to HTTP/2 upgrade, TLS certificate-fingerprint
-pinning, the data-blob and fixed/dynamic index formats, FastCDC content-defined
-chunking, and incremental deduplication against a previous snapshot.
+| Doc | For | Contents |
+| --- | --- | --- |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Operators | Install and run pbsgui in production. Requirements, single-host setup, the first backup, upgrades. |
+| [RELAY.md](RELAY.md) | Operators | Deploy relay mode. Topology, ports, credentials, the step-by-step proxy and agent setup, and troubleshooting. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Everyone | Components, the SQL backup strategy, the relay design, and the storage model. |
+| [STATUS.md](STATUS.md) | Everyone | What works, what is in progress, and the roadmap. |
+| [DEVELOPERS.md](DEVELOPERS.md) | Developers | Prerequisites, building the app and installer, and the dev loop. |
+| [TESTING.md](TESTING.md) | Developers | Test tiers and the manual integration pass. |
 
-## Workspace layout
+## Start here
 
-| Path | Purpose |
-| --- | --- |
-| `crates/pbs-client` | Clean-room PBS protocol client: sessions, blobs, indexes, chunking, REST. |
-| `crates/pbsgui-ipc` | Shared GUI/engine message types and the local-socket transport. |
-| `crates/pbsgui-engine` | The privileged engine: backup, scheduler, secrets, SQL, the service. |
-| `src-tauri` | The Tauri desktop application (commands, tray, window behavior). |
-| `ui/` | Static front end (HTML/CSS/JS) served by the Tauri app. |
-| `docs/` | This documentation. |
+- Deploying to one SQL Server: read [DEPLOYMENT.md](DEPLOYMENT.md).
+- Deploying a fleet, or offloading backup CPU: read [DEPLOYMENT.md](DEPLOYMENT.md),
+  then [RELAY.md](RELAY.md).
+- Building from source: read [DEVELOPERS.md](DEVELOPERS.md).
 
 ## Screenshots
 
@@ -71,9 +65,13 @@ chunking, and incremental deduplication against a previous snapshot.
 
 See [screenshots/README.md](screenshots/README.md) for how these are captured.
 
-## More
+## Workspace layout
 
-- [STATUS.md](STATUS.md) - what works today, what is in progress, and the roadmap.
-- [DEVELOPERS.md](DEVELOPERS.md) - prerequisites, building, testing, and the dev loop.
-- [TESTING.md](TESTING.md) - the test tiers and the manual integration / point-in-time pass.
-- [ARCHITECTURE.md](ARCHITECTURE.md) - components, the SQL Server backup strategy, and the storage model.
+| Path | Purpose |
+| --- | --- |
+| `crates/pbs-client` | Clean-room PBS protocol client: sessions, blobs, indexes, chunking, REST. |
+| `crates/pbsgui-ipc` | Shared GUI/engine message types and the local-socket transport. |
+| `crates/pbsgui-engine` | The privileged engine: backup, scheduler, secrets, SQL, the relay, the service. |
+| `src-tauri` | The Tauri desktop application (commands, tray, window behavior). |
+| `ui/` | Static front end (HTML/CSS/JS) served by the Tauri app. |
+| `docs/` | This documentation. |

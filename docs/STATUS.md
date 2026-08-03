@@ -109,8 +109,9 @@ CI on Windows and exercised manually.
   without each one paying the deduplication cost. Both backup and restore
   (including point-in-time) stream over the relay; agents are paired with the
   `pbsgui-engine relay add-agent` / `relay join` commands, and a connection is
-  routed through an agent from the SQL Servers tab. Pending runtime validation
-  on two Windows machines.
+  routed through an agent from the SQL Servers tab. Shipped in the v0.3.0-rc.1
+  testing release. Pending runtime validation on real hardware. See
+  [RELAY.md](RELAY.md).
 - **Differential SQL backups**, **log-chain re-base detection** (an external tool
   breaking the chain), and managing the PBS **retention** that bounds the
   point-in-time window.
