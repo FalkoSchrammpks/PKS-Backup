@@ -134,8 +134,8 @@ jobs:
 
       - name: Build app and NSIS installers (offline + online)
         # engine-sidecar.conf.json bundles the engine sidecar; build-version.json
-        # stamps the version; signing.conf.json (signCommand) is appended only when
-        # signing is enabled. We build twice: the default bundles WebView2 (offline,
+        # stamps the version; a generated signing config (signCommand) is appended
+        # only when signing is enabled. We build twice: the default bundles WebView2 (offline,
         # air-gapped), then webview-online.conf.json makes a smaller installer that
         # downloads WebView2 at install. The second build only re-bundles (the Rust
         # binaries are unchanged), so it is quick.
@@ -143,7 +143,22 @@ jobs:
         run: |
           $configs = @('--config', 'src-tauri/engine-sidecar.conf.json', '--config', 'build-version.json')
           if ('${{ steps.signing.outputs.enabled }}' -eq 'true') {
-            $configs += @('--config', 'src-tauri/signing.conf.json')
+            # Tauri runs bundle.windows.signCommand from the build cwd (the repo
+            # root), not from src-tauri, so a relative script path is not found
+            # ("failed to run powershell"). Generate the config with an ABSOLUTE
+            # path to sign-windows.ps1, using the object form so the argument
+            # parsing is unambiguous. %1 is the artifact Tauri wants signed (the
+            # app exe and each installer; the engine sidecar is already signed).
+            $signScript = (Resolve-Path 'src-tauri/sign-windows.ps1').Path
+            $signConf = [ordered]@{ bundle = [ordered]@{ windows = [ordered]@{
+              signCommand = [ordered]@{
+                cmd  = 'powershell'
+                args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $signScript, '%1')
+              }
+            } } }
+            ($signConf | ConvertTo-Json -Depth 8) |
+              Set-Content -Path 'src-tauri/signing.gen.conf.json' -Encoding ascii
+            $configs += @('--config', 'src-tauri/signing.gen.conf.json')
           }
           $nsis = 'target/release/bundle/nsis'
           New-Item -ItemType Directory -Force -Path dist | Out-Null
