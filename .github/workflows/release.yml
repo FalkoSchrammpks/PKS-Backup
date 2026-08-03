@@ -78,21 +78,21 @@ jobs:
           # signtool /sha1 <thumbprint> can sign through the cloud-held key.
           & "$ssm\smctl.exe" windows certsync
           if ($LASTEXITCODE -ne 0) { throw "smctl windows certsync failed ($LASTEXITCODE): check SM_HOST / SM_API_KEY / SM_CLIENT_CERT_FILE_B64 / SM_CLIENT_CERT_PASSWORD." }
-          # Show what certsync actually put in the store, so SM_CODE_SIGNING_CERT_SHA1_HASH
-          # can be matched to a real certificate. Thumbprints and subjects are not secrets.
-          Write-Host "== Certificates after certsync =="
-          foreach ($store in 'Cert:\CurrentUser\My', 'Cert:\LocalMachine\My') {
-            Write-Host "-- $store --"
-            Get-ChildItem $store | ForEach-Object {
-              $eku = ($_.EnhancedKeyUsageList | ForEach-Object { $_.FriendlyName }) -join ','
-              Write-Host ("  Thumbprint={0}  Subject={1}  EKU={2}" -f $_.Thumbprint, $_.Subject, $eku)
-            }
-          }
+          # Guard: confirm certsync installed a code-signing certificate matching
+          # SM_CODE_SIGNING_CERT_SHA1_HASH before the build spends time signing. A
+          # mismatch here (renewed cert, wrong thumbprint) fails with a clear
+          # message instead of a late signtool "No certificates were found".
+          # Thumbprints and subjects are not secrets.
           $want = "${{ vars.SM_CODE_SIGNING_CERT_SHA1_HASH }}"
-          $match = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My |
-            Where-Object { $_.Thumbprint -eq $want }
-          if ($match) { Write-Host "signtool thumbprint $want matches a synced certificate." }
-          else { Write-Warning "signtool thumbprint $want matches NOTHING in the store above." }
+          $signing = Get-ChildItem Cert:\CurrentUser\My, Cert:\LocalMachine\My |
+            Where-Object { $_.EnhancedKeyUsageList.FriendlyName -contains 'Code Signing' }
+          $signing | ForEach-Object {
+            Write-Host ("code-signing cert: Thumbprint={0}  Subject={1}" -f $_.Thumbprint, $_.Subject)
+          }
+          if (-not ($signing.Thumbprint -contains $want)) {
+            throw "SM_CODE_SIGNING_CERT_SHA1_HASH ($want) matches no code-signing certificate that certsync installed. Update the variable to a thumbprint listed above."
+          }
+          Write-Host "code-signing thumbprint $want is present."
 
       - name: Compute version from the tag
         id: version
