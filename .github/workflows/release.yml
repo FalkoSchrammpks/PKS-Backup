@@ -80,13 +80,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "smctl windows certsync failed ($LASTEXITCODE): check SM_HOST / SM_API_KEY / SM_CLIENT_CERT_FILE_B64 / SM_CLIENT_CERT_PASSWORD." }
 
       - name: Compute version from the tag
+        id: version
         shell: pwsh
         run: |
-          $ver = "${{ github.ref_name }}".TrimStart('v')
+          $fullver = "${{ github.ref_name }}".TrimStart('v')
+          # The installer/product version must be a plain numeric semver, so drop
+          # any prerelease suffix (0.3.0-rc.1 -> 0.3.0) for what Tauri/NSIS stamp.
+          # The full tag still names the GitHub Release and the in-app build string.
+          $numver = ($fullver -split '-')[0]
           $short = "${{ github.sha }}".Substring(0, 7)
-          "PBSGUI_VERSION=$ver"        | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "PBSGUI_BUILD=$ver ($short)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          '{"version":"' + $ver + '"}' | Out-File -FilePath build-version.json -Encoding ascii
+          "PBSGUI_VERSION=$numver"          | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "PBSGUI_BUILD=$fullver ($short)"  | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          '{"version":"' + $numver + '"}'   | Out-File -FilePath build-version.json -Encoding ascii
+          # A semver prerelease tag (containing a hyphen, e.g. v0.3.0-rc.1) is
+          # published as a GitHub pre-release: it does not become "Latest", so the
+          # last stable tag stays the default download.
+          $pre = if ($fullver -match '-') { 'true' } else { 'false' }
+          "prerelease=$pre" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version $fullver (numeric $numver, prerelease=$pre)"
 
       - name: Build engine
         run: cargo build -p pbsgui-engine --release
@@ -155,5 +166,8 @@ jobs:
           body_path: .github/RELEASE_NOTES.md
           # Append the auto-generated commit/PR list since the previous tag.
           generate_release_notes: true
+          # Mark a semver prerelease tag as a pre-release, so it is not flagged
+          # "Latest" and the last stable release stays the default download.
+          prerelease: ${{ steps.version.outputs.prerelease }}
           files: dist/*.exe
           fail_on_unmatched_files: true

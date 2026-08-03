@@ -1,32 +1,43 @@
 pbsgui backs up Windows files and Microsoft SQL Server to a Proxmox Backup Server
 (PBS), with browse and point-in-time restore.
 
+## Testing release (new architecture)
+
+This is a **pre-release for testing a new architecture** and has not yet been
+validated end to end on real hardware. If you want the last tested, stable build,
+use **v0.2.0**: https://github.com/sol1/pbsgui/releases/tag/v0.2.0
+
+Please try this build in a non-production environment and report what you find.
+
 ## New in this release
 
-- **Restore to a different SQL Server, or to a network folder.** A SQL database can
-  now be restored into a different SQL Server instance: pick a saved connection as
-  the target, and pbsgui relocates the database files to that server's default data
-  and log directories after checking the target is reachable and a sysadmin. A
-  restore to files can also target a network (UNC) path, prompting for credentials
-  when the backup service cannot reach the share on its own.
+- **Remote SQL Server backup through a relay proxy (the new architecture).** A thin
+  pbsgui agent on the SQL Server host now runs only the backup device and streams the
+  raw backup over an encrypted connection to a separate pbsgui "proxy" machine, which
+  does the deduplication, compression, encryption, and upload to PBS. The heavy CPU
+  work moves off the database server, so a fleet of SQL Servers can be backed up
+  without each one paying that cost during the backup window. Both backup and
+  point-in-time restore stream over the relay.
 
-- **One database's failure no longer stops the rest.** A SQL job covering several
-  databases now backs up every eligible one and reports a clear per-database summary,
-  instead of aborting the whole run on the first failure. A database in SIMPLE
-  recovery is skipped for transaction-log backups with a plain message (SQL Server
-  manages that log itself) rather than being treated as an error, and any database
-  whose log backups are failing is now visible instead of silently growing its log.
+  Setup: on the proxy run `pbsgui-engine relay add-agent <name>` (it prints the exact
+  command to run on the SQL host), run that `relay join` command on the SQL host, then
+  in the SQL Servers tab route a saved connection through the agent with the Relay
+  button. The SQL Servers tab shows each agent's live connection status.
 
-- **Backups and restores leave CPU headroom.** Compression and encryption no longer
-  run wide open across every core, so a backup, and especially a restore, no longer
-  saturates a live database server. The default is about half the machine's cores;
-  set the PBSGUI_WORKER_LIMIT environment variable to widen it for a dedicated backup
-  window.
+- **Snapshot group safety.** A SQL job that would write colliding PBS snapshot groups
+  (for example two databases whose names reduce to the same id) is now refused when
+  saved, and the job wizard shows the exact snapshot groups a job will create so the
+  per-database naming is clear up front.
 
-- **Compact notifications.** Slack and webhook messages are now a compact one or two
-  lines led by a status symbol (success, warning, or failure), with human-readable
-  sizes (for example 716 GiB) instead of raw byte counts. Email and the in-app log
-  show readable sizes too.
+## Known limitations
+
+- The relay path is new and unvalidated on real SQL Server and PBS hardware; use
+  v0.2.0 for production until this has been tested.
+- Restoring a very old snapshot (one taken before pbsgui stored the database file
+  list) under a new name or into a different instance is not supported over the
+  relay; restore it under its original name, or run the restore from pbsgui installed
+  directly on the SQL host.
+- The installer is unsigned, so Windows SmartScreen warns on first run.
 
 Installers are attached below. See the
 [README](https://github.com/sol1/pbsgui#install) for which one to choose, plus
