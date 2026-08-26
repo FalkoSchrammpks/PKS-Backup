@@ -698,12 +698,12 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let show = MenuItemBuilder::with_id("show", "Show pbsgui").build(app)?;
+    let show = MenuItemBuilder::with_id("show", "Show PKS Backup").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app).items(&[&show, &quit]).build()?;
 
     TrayIconBuilder::with_id("main")
-        .tooltip("pbsgui")
+        .tooltip("PKS Backup")
         .icon(app.default_window_icon().cloned().expect("window icon"))
         .menu(&menu)
         .show_menu_on_left_click(false)
