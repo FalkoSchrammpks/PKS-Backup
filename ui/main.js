@@ -2197,6 +2197,20 @@ window.addEventListener("DOMContentLoaded", () => {
   el("n-test-email").onclick = () => testNotificationChannel("email");
   el("n-test-webhook").onclick = () => testNotificationChannel("webhook");
   el("new-job").onclick = () => openEditor(null);
+
+  el("run-machine-backup").onclick = async () => {
+    try {
+      el("run-machine-backup").disabled = true;
+      el("run-machine-backup").innerText = "Starte Backup...";
+      const res = await invoke("start_machine_backup");
+      alert(res);
+    } catch (e) {
+      alert("Fehler: " + e);
+    } finally {
+      el("run-machine-backup").disabled = false;
+      el("run-machine-backup").innerText = "System Backup Starten (VSS)";
+    }
+  };
   el("cancel-edit").onclick = () => showView("jobs");
   el("wiz-next").onclick = () => showWizStep(wizStep + 1);
   el("wiz-back").onclick = () => showWizStep(wizStep - 1);
