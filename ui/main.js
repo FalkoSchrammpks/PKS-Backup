@@ -2131,26 +2131,60 @@ async function discoverSql() {
   }
 }
 
+let adminUnlocked = false;
+
+function requireAdmin(action) {
+  if (adminUnlocked) {
+    action();
+    return;
+  }
+  const modal = el("admin-password-modal");
+  modal.classList.remove("hidden");
+  
+  el("admin-password-ok").onclick = () => {
+    if (el("admin-password-input").value === "Lagune2026") {
+      adminUnlocked = true;
+      modal.classList.add("hidden");
+      el("admin-password-error").style.display = "none";
+      el("admin-password-input").value = "";
+      action();
+    } else {
+      el("admin-password-error").style.display = "block";
+      el("admin-password-input").value = "";
+    }
+  };
+  
+  el("admin-password-cancel").onclick = () => {
+    modal.classList.add("hidden");
+    el("admin-password-error").style.display = "none";
+    el("admin-password-input").value = "";
+  };
+}
+
 window.addEventListener("DOMContentLoaded", () => {
-  el("tab-jobs").onclick = () => showView("jobs");
+  // Start on the browse tab by default so non-admins don't get prompted immediately
+  showView("browse");
+  populateBrowseJobs();
+
+  el("tab-jobs").onclick = () => requireAdmin(() => showView("jobs"));
   el("tab-browse").onclick = () => {
     showView("browse");
     populateBrowseJobs();
   };
-  el("tab-sql").onclick = () => {
+  el("tab-sql").onclick = () => requireAdmin(() => {
     showView("sql");
     loadSqlConnections();
     loadRelayAgents();
-  };
-  el("tab-pbs").onclick = () => {
+  });
+  el("tab-pbs").onclick = () => requireAdmin(() => {
     showView("pbs");
     loadPbsServers();
-  };
-  el("tab-notify").onclick = () => {
+  });
+  el("tab-notify").onclick = () => requireAdmin(() => {
     showView("notify");
     loadNotifications();
     loadMetrics();
-  };
+  });
   el("discover-sql").onclick = discoverSql;
   el("pbs-form").addEventListener("submit", savePbsServer);
   el("pbs-test").onclick = testPbsForm;
