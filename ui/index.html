@@ -515,6 +515,22 @@
       </div>
     </div>
 
+    <!-- Password Modal for Admin Tabs -->
+    <div id="admin-password-modal" class="modal-overlay hidden">
+      <div class="modal">
+        <h2>Administrator-Bereich</h2>
+        <p>Bitte gib das Admin-Passwort ein, um diesen Bereich zu öffnen:</p>
+        <div class="form-group">
+          <input id="admin-password-input" type="password" placeholder="Passwort" style="width: 100%; box-sizing: border-box; margin-bottom: 10px;" />
+          <p id="admin-password-error" style="color: red; display: none; margin-top: 0;">Falsches Passwort!</p>
+        </div>
+        <div class="actions">
+          <button id="admin-password-ok" class="primary" type="button">Weiter</button>
+          <button id="admin-password-cancel" type="button">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
     <script src="main.js"></script>
   </body>
 </html>
