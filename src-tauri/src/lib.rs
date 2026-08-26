@@ -726,11 +726,34 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[tauri::command]
+fn start_machine_backup() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("powershell")
+            .arg("-WindowStyle")
+            .arg("Hidden")
+            .arg("-Command")
+            .arg("Start-Process -FilePath 'C:\\PKS-Backup\\tizbac.exe' -ArgumentList 'machinebackup' -Verb RunAs")
+            .status();
+        match status {
+            Ok(s) if s.success() => Ok("Gestartet".to_string()),
+            Ok(s) => Err(format!("Fehler: {}", s)),
+            Err(e) => Err(format!("Konnte Backup nicht starten: {}", e)),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Nur unter Windows verfügbar.".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
         engine_ping,
+        start_machine_backup,
         engine_status,
         build_info,
         list_jobs,
